@@ -1,0 +1,71 @@
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------
+  # PostgreSQL database (runs the embedded migrations on startup)
+  # ---------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: kubefix
+      POSTGRES_PASSWORD: kubefix
+      POSTGRES_DB: kubefix
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kubefix -d kubefix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------
+  # Backend API (Go)
+  # ---------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: "postgres://kubefix:kubefix@postgres:5432/kubefix?sslmode=disable"
+      LISTEN_ADDR: ":8080"
+      CORS_ALLOW_ORIGIN: "*"
+      COOKIE_SECURE: "false"
+      COOKIE_DOMAIN: ""
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production-32chars-min}"
+      GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-your-google-client-id}"
+      GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-your-google-client-secret}"
+      GOOGLE_REDIRECT_URL: "http://backend:8080/api/auth/google"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Uncomment to enable real Docker challenge allocation
+    # (requires building with the `docker` tag and mounting the socket):
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock
+
+  # ---------------------------------------------------------------
+  # Frontend (Next.js)
+  # ---------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://localhost:8080"
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: "${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-your-google-client-id}"
+        NEXT_PUBLIC_GOOGLE_REDIRECT_URI: "${NEXT_PUBLIC_GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/callback}"
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8080"
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-your-google-client-id}"
+      NEXT_PUBLIC_GOOGLE_REDIRECT_URI: "${NEXT_PUBLIC_GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/callback}"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

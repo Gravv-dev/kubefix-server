@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build outputs
+.next/
+dist/
+out/
+*.exe
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+~*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+bin/
+*.exe
