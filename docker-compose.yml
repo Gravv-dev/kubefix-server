@@ -30,13 +30,13 @@ services:
     environment:
       DATABASE_URL: "postgres://kubefix:kubefix@postgres:5432/kubefix?sslmode=disable"
       LISTEN_ADDR: ":8080"
-      CORS_ALLOW_ORIGIN: "*"
+      CORS_ALLOW_ORIGIN: "http://localhost:3000"
       COOKIE_SECURE: "false"
       COOKIE_DOMAIN: ""
       JWT_SECRET: "${JWT_SECRET:-change-me-in-production-32chars-min}"
       GOOGLE_CLIENT_ID: "${GOOGLE_CLIENT_ID:-your-google-client-id}"
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-your-google-client-secret}"
-      GOOGLE_REDIRECT_URL: "http://backend:8080/api/auth/google"
+      GOOGLE_REDIRECT_URL: "${NEXT_PUBLIC_GOOGLE_REDIRECT_URI:-http://localhost:3000/auth/callback}"
     ports:
       - "8080:8080"
     depends_on:

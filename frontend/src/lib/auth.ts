@@ -14,7 +14,7 @@ export type MeResponse = { user: User };
 
 export async function getMe(): Promise<User | null> {
   try {
-    const data = (await api.get("/api/auth/me")) as MeResponse;
+    const data = await api.get<MeResponse>("/api/auth/me");
     return data.user;
   } catch {
     return null;

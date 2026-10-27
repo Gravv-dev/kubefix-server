@@ -66,6 +66,8 @@ func (s *Service) HandleGetChallenge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	c.VerificationJSON = ""
+	c.ExpectedAnswer = ""
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"challenge": c})
 }

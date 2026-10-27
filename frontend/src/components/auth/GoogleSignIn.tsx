@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 
 export type GoogleSignInProps = {
-  onSuccess?: () => void;
   clientId: string;
   redirectUri: string;
   scope?: string;
 };
 
 export function GoogleSignIn({
-  onSuccess,
   clientId,
   redirectUri,
   scope = "openid email profile",
@@ -20,16 +18,19 @@ export function GoogleSignIn({
 
   const handleSignIn = () => {
     setLoading(true);
+    const state = crypto.randomUUID();
+    sessionStorage.setItem("google_oauth_state", state);
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
       response_type: "code",
       scope,
+      state,
       access_type: "offline",
       prompt: "consent",
     });
     const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-    // Full-page redirect to Google; Google posts back to our callback with ?code=.
+    // Google redirects back to the frontend callback with the authorization code.
     window.location.href = url;
   };
 

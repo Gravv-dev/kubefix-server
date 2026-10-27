@@ -33,9 +33,13 @@ func CORS(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		allowed := getEnv("CORS_ALLOW_ORIGIN", "*")
 		if allowed == "*" {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-		} else {
+			if origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Add("Vary", "Origin")
+			}
+		} else if origin == allowed {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Add("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")

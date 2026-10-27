@@ -202,12 +202,12 @@ func (s *Store) ListChallenges(ctx context.Context, category, difficulty string)
 		return nil, err
 	}
 	defer rows.Close()
-	return scanChallenges(rows)
+	return scanChallenges(rows, false)
 }
 
 // GetChallenge returns a single challenge by ID (published only unless admin).
 func (s *Store) GetChallenge(ctx context.Context, id uuid.UUID, publishedOnly bool) (*Challenge, error) {
-	query := `SELECT id, title, description, category, difficulty, instructions, hints, points, is_published, created_at FROM challenges WHERE id = $1`
+	query := `SELECT id, title, description, category, difficulty, instructions, hints, points, is_published, verification, expected_answer, created_at, updated_at FROM challenges WHERE id = $1`
 	args := []any{id}
 	if publishedOnly {
 		query += ` AND is_published = true`
@@ -228,12 +228,12 @@ func (s *Store) GetChallenge(ctx context.Context, id uuid.UUID, publishedOnly bo
 
 // ListAdminChallenges returns all challenges for admin dashboard.
 func (s *Store) ListAdminChallenges(ctx context.Context) ([]Challenge, error) {
-	rows, err := s.pool.Query(ctx, `SELECT id, title, description, category, difficulty, instructions, hints, points, is_published, created_at FROM challenges ORDER BY created_at DESC`)
+	rows, err := s.pool.Query(ctx, `SELECT id, title, description, category, difficulty, instructions, hints, points, is_published, verification, expected_answer, created_at, updated_at FROM challenges ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanChallenges(rows)
+	return scanChallenges(rows, true)
 }
 
 // CreateChallenge inserts a new challenge.
@@ -245,7 +245,7 @@ func (s *Store) CreateChallenge(ctx context.Context, c Challenge) (*Challenge, e
 		INSERT INTO challenges (title, description, category, difficulty, instructions, hints, points, is_published, verification, expected_answer)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, title, description, category, difficulty, instructions, hints, points, is_published, verification, expected_answer, created_at, updated_at
-	`, c.Title, c.Description, c.Category, c.Difficulty, c.Instructions, marshalHints(c.Hints), c.Points, c.IsPublished, []byte("{}"), c.ExpectedAnswer).Scan(
+	`, c.Title, c.Description, c.Category, c.Difficulty, c.Instructions, marshalHints(c.Hints), c.Points, c.IsPublished, verificationJSON(c.VerificationJSON), c.ExpectedAnswer).Scan(
 		&out.ID, &out.Title, &out.Description, &out.Category, &out.Difficulty, &out.Instructions, &hints, &out.Points, &out.IsPublished, &verification, &out.ExpectedAnswer, &createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -267,7 +267,7 @@ func (s *Store) UpdateChallenge(ctx context.Context, id uuid.UUID, c Challenge) 
 		SET title = $2, description = $3, category = $4, difficulty = $5, instructions = $6, hints = $7, points = $8, is_published = $9, verification = $10, expected_answer = $11, updated_at = now()
 		WHERE id = $1
 		RETURNING id, title, description, category, difficulty, instructions, hints, points, is_published, verification, expected_answer, created_at, updated_at
-	`, id, c.Title, c.Description, c.Category, c.Difficulty, c.Instructions, marshalHints(c.Hints), c.Points, c.IsPublished, []byte("{}"), c.ExpectedAnswer).Scan(
+	`, id, c.Title, c.Description, c.Category, c.Difficulty, c.Instructions, marshalHints(c.Hints), c.Points, c.IsPublished, verificationJSON(c.VerificationJSON), c.ExpectedAnswer).Scan(
 		&out.ID, &out.Title, &out.Description, &out.Category, &out.Difficulty, &out.Instructions, &hints, &out.Points, &out.IsPublished, &verification, &out.ExpectedAnswer, &createdAt, &updatedAt,
 	)
 	if err != nil {
@@ -379,14 +379,25 @@ func (s *Store) GetChallengeByIDForAdmin(ctx context.Context, id uuid.UUID) (*Ch
 	return s.GetChallenge(ctx, id, false)
 }
 
-func scanChallenges(rows pgx.Rows) ([]Challenge, error) {
+func scanChallenges(rows pgx.Rows, includePrivate bool) ([]Challenge, error) {
 	var out []Challenge
 	for rows.Next() {
 		var c Challenge
-		var hints []byte
+		var hints, verification []byte
 		var updatedAt time.Time
-		if err := rows.Scan(&c.ID, &c.Title, &c.Description, &c.Category, &c.Difficulty, &c.Instructions, &hints, &c.Points, &c.IsPublished, &c.VerificationJSON, &c.ExpectedAnswer, &c.CreatedAt, &updatedAt); err != nil {
+		dest := []any{&c.ID, &c.Title, &c.Description, &c.Category, &c.Difficulty, &c.Instructions, &hints, &c.Points, &c.IsPublished}
+		if includePrivate {
+			dest = append(dest, &verification, &c.ExpectedAnswer)
+		}
+		dest = append(dest, &c.CreatedAt)
+		if includePrivate {
+			dest = append(dest, &updatedAt)
+		}
+		if err := rows.Scan(dest...); err != nil {
 			return nil, err
+		}
+		if includePrivate {
+			c.VerificationJSON = string(verification)
 		}
 		_ = parseJSONHints(hints, &c.Hints)
 		out = append(out, c)
@@ -432,4 +443,11 @@ func marshalHints(hints []string) []byte {
 
 func parseJSONHints(b []byte, out *[]string) error {
 	return json.Unmarshal(b, out)
+}
+
+func verificationJSON(value string) []byte {
+	if value == "" {
+		return []byte("{}")
+	}
+	return []byte(value)
 }

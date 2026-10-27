@@ -7,10 +7,10 @@ class ApiError extends Error {
   }
 }
 
-async function request(
+async function request<T = unknown>(
   input: string,
   init: RequestInit = {}
-): Promise<any> {
+): Promise<T> {
   const url = input.startsWith("http") ? input : `${API_BASE}${input}`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -28,8 +28,15 @@ async function request(
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {
-      const body = await res.json();
-      message = body.error || body.message || message;
+      const body: unknown = await res.json();
+      if (body && typeof body === "object") {
+        const errorBody = body as { error?: unknown; message?: unknown };
+        if (typeof errorBody.error === "string") {
+          message = errorBody.error;
+        } else if (typeof errorBody.message === "string") {
+          message = errorBody.message;
+        }
+      }
     } catch {
       // ignore non-json error bodies
     }
@@ -38,33 +45,34 @@ async function request(
 
   const contentType = res.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
-    return res.json();
+    return (await res.json()) as T;
   }
-  return res.text();
+  return (await res.text()) as T;
 }
 
 export const api = {
-  get: (path: string, init?: RequestInit) => request(path, { ...init, method: "GET" }),
-  post: (path: string, body?: any, init?: RequestInit) =>
-    request(path, {
+  get: <T = unknown>(path: string, init?: RequestInit) =>
+    request<T>(path, { ...init, method: "GET" }),
+  post: <T = unknown>(path: string, body?: unknown, init?: RequestInit) =>
+    request<T>(path, {
       ...init,
       method: "POST",
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
-  put: (path: string, body?: any, init?: RequestInit) =>
-    request(path, {
+  put: <T = unknown>(path: string, body?: unknown, init?: RequestInit) =>
+    request<T>(path, {
       ...init,
       method: "PUT",
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
-  patch: (path: string, body?: any, init?: RequestInit) =>
-    request(path, {
+  patch: <T = unknown>(path: string, body?: unknown, init?: RequestInit) =>
+    request<T>(path, {
       ...init,
       method: "PATCH",
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
-  del: (path: string, init?: RequestInit) =>
-    request(path, { ...init, method: "DELETE" }),
+  del: <T = unknown>(path: string, init?: RequestInit) =>
+    request<T>(path, { ...init, method: "DELETE" }),
 };
 
 export { ApiError };

@@ -33,12 +33,21 @@ func NewPool(ctx context.Context) (*Pool, error) {
 	return &Pool{pool}, nil
 }
 
-// Migrate runs all embedded SQL migrations in lexical order.
+// Migrate applies each embedded SQL migration once, in lexical order.
 func Migrate(ctx context.Context, pool *Pool) error {
 	entries, err := fs.ReadDir(migrations, "migrations")
 	if err != nil {
 		return err
 	}
+	if _, err := pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			name TEXT PRIMARY KEY,
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		)
+	`); err != nil {
+		return err
+	}
+
 	var files []string
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -52,12 +61,57 @@ func Migrate(ctx context.Context, pool *Pool) error {
 		if err != nil {
 			return err
 		}
-		if _, err := pool.Exec(ctx, string(content)); err != nil {
+		applied, err := applyMigration(ctx, pool, f, string(content))
+		if err != nil {
 			return err
 		}
-		log.Printf("applied migration %s", f)
+		if applied {
+			log.Printf("applied migration %s", f)
+		}
 	}
 	return nil
+}
+
+func applyMigration(ctx context.Context, pool *Pool, name, content string) (bool, error) {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(1145783650)`); err != nil {
+		return false, err
+	}
+
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE name = $1)`, name).Scan(&exists); err != nil {
+		return false, err
+	}
+	if exists {
+		return false, tx.Commit(ctx)
+	}
+
+	// Databases initialized before schema_migrations was introduced already have
+	// the initial schema, so record that baseline instead of recreating tables.
+	if name == "001_initial_schema.sql" {
+		if err := tx.QueryRow(ctx, `SELECT to_regclass('public.users') IS NOT NULL`).Scan(&exists); err != nil {
+			return false, err
+		}
+		if exists {
+			if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (name) VALUES ($1)`, name); err != nil {
+				return false, err
+			}
+			return false, tx.Commit(ctx)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, content); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (name) VALUES ($1)`, name); err != nil {
+		return false, err
+	}
+	return true, tx.Commit(ctx)
 }
 
 func getEnv(key, def string) string {

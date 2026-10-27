@@ -7,28 +7,22 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { GoogleSignIn } from "@/components/auth/GoogleSignIn";
 import { api } from "@/lib/api";
-import { getMe } from "@/lib/auth";
+import { getMe, User } from "@/lib/auth";
 import { Challenge, Difficulty, CATEGORY_LABELS, DIFFICULTY_LABELS } from "@/types";
 import {
   Play,
   Terminal,
   CheckCircle,
   Clock,
-  Docker,
-  Kubernetes,
+  Box as Docker,
+  Boxes as Kubernetes,
   Search,
   Filter,
 } from "lucide-react";
 
-const GOOGLE_CLIENT_ID =
-  process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "your-google-client-id";
-const GOOGLE_REDIRECT_URI =
-  process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI ||
-  "http://localhost:3000/auth/callback";
-
 export default function Home() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<"all" | "docker" | "kubernetes">("all");
@@ -68,10 +62,6 @@ export default function Home() {
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   }).slice(0, 4);
 
-  const popular = [...challenges]
-    .sort((a, b) => (b.points || 0) - (a.points || 0))
-    .slice(0, 4);
-
   const completedCount = user?.credits !== undefined ? 10 - user.credits : 0;
 
   return (
@@ -101,9 +91,11 @@ export default function Home() {
             </div>
           ) : (
             <GoogleSignIn
-              clientId={GOOGLE_CLIENT_ID}
-              redirectUri={GOOGLE_REDIRECT_URI}
-              onSuccess={load}
+              clientId={process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "your-google-client-id"}
+              redirectUri={
+                process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI ||
+                "http://localhost:3000/auth/callback"
+              }
             />
           )}
           <Button
@@ -187,7 +179,7 @@ export default function Home() {
         >
           <Kubernetes className="mr-2 h-4 w-4" /> Kubernetes
         </Button>
-        {[ "easy", "medium", "hard" ] as Difficulty[]}.map((d) => (
+        {(["easy", "medium", "hard"] as Difficulty[]).map((d) => (
           <Button
             key={d}
             variant={difficulty === d ? "brand" : "outline"}
@@ -230,6 +222,11 @@ export default function Home() {
           ))}
         </div>
       </section>
+      {loading && (
+        <p role="status" className="mt-6 text-center text-sm text-gray-500">
+          Loading challenges…
+        </p>
+      )}
     </div>
   );
 }

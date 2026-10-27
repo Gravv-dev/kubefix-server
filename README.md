@@ -8,56 +8,118 @@ Practice real-world Docker and Kubernetes troubleshooting in isolated, disposabl
 - **Frontend** (`frontend/`) — Next.js 15 App Router, React 19, Tailwind CSS.
 - **Database** — PostgreSQL 16 with embedded SQL migrations.
 
-## Run locally (without Docker)
+## Run locally (without Docker Compose)
 
 ### Prerequisites
 - Go 1.26+
 - Node 20+ & npm
-- PostgreSQL
+- PostgreSQL 16+
+- A Google OAuth web client (only needed to test sign-in)
 
-### 1. Database
+### 1. Start PostgreSQL and create the database
+
+Make sure PostgreSQL is running, then create the application role and database:
+
 ```bash
-sudo -u postgres psql -c "CREATE USER kubefix WITH PASSWORD 'kubefix' SUPERUSER;"
+sudo -u postgres psql -c "CREATE USER kubefix WITH PASSWORD 'kubefix';"
 sudo -u postgres createdb -O kubefix kubefix
-sudo -u postgres psql -d kubefix -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
 ```
 
-### 2. Backend
+The backend runs the embedded schema migrations automatically on startup.
+
+### 2. Configure and run the backend
+
+In terminal 1, from the repository root:
+
 ```bash
 cd backend
 cp .env.example .env
-# edit .env: set JWT_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
 go mod download
 go run main.go
-# http://localhost:8080/healthz
 ```
 
-### 3. Frontend
+Edit `backend/.env` and set a random `JWT_SECRET` (at least 32 characters). For
+Google sign-in, also set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+`GOOGLE_REDIRECT_URL` must exactly match the authorized redirect URI registered
+for your Google OAuth client; for local development use
+`http://localhost:3000/auth/callback`.
+
+### 3. Configure and run the frontend
+
+In terminal 2, from the repository root:
+
 ```bash
 cd frontend
-npm install
-cp .env.example .env.local  # or create .env.local with NEXT_PUBLIC_* vars
-npm run dev                 # http://localhost:3000
+npm ci
+cp .env.example .env.local
+npm run dev
 ```
+
+For sign-in, edit `frontend/.env.local` and set `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+to the same client ID as the backend. Set
+`NEXT_PUBLIC_GOOGLE_REDIRECT_URI=http://localhost:3000/auth/callback`.
+Open `http://localhost:3000`.
 
 ## Run with Docker Compose
 
+Install and start Docker with the Compose plugin first. From the repository root,
+create a `.env` file:
+
 ```bash
-# configure secrets
 cat > .env <<'EOF'
-JWT_SECRET=<32+ char random string>
-GOOGLE_CLIENT_ID=<your Google OAuth client id>
-GOOGLE_CLIENT_SECRET=<your Google OAuth client secret>
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=<your Google OAuth client id>
+JWT_SECRET=replace-with-a-random-secret-at-least-32-characters
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 NEXT_PUBLIC_GOOGLE_REDIRECT_URI=http://localhost:3000/auth/callback
 EOF
 
 docker compose up -d --build
 ```
 
-- Frontend: `http://localhost:3000`
-- Backend API: `http://localhost:8080`
-- Health: `http://localhost:8080/healthz`
+The frontend and backend can start without real Google credentials, but Google
+sign-in will not work until valid credentials and the matching redirect URI are
+configured. To view startup status and logs:
+
+```bash
+docker compose ps
+docker compose logs -f backend frontend
+```
+
+Stop the services with `docker compose down`. To also delete the PostgreSQL
+volume and all stored data, use `docker compose down -v`.
+
+## Check that it is working
+
+With the services running, check the backend health endpoint and public challenge
+catalog:
+
+```bash
+curl -i http://localhost:8080/healthz
+curl -i http://localhost:8080/api/challenges
+```
+
+The health endpoint should return HTTP `200` and `{"status":"ok"}`. The catalog
+should return HTTP `200` and JSON containing a `challenges` array (it may be
+empty until challenges have been added and published). Open
+`http://localhost:3000` and confirm the page loads and displays the catalog.
+To check the database container in Compose, run:
+
+```bash
+docker compose exec postgres pg_isready -U kubefix -d kubefix
+```
+
+To run code checks locally:
+
+```bash
+cd backend && go test ./... && go vet ./...
+cd ../frontend && npm ci && npm run lint && npm test -- --runInBand && npm run build
+```
+
+The current default backend does not allocate real Docker or Kubernetes
+challenge environments. It can serve the site, health endpoint, catalog, and
+authentication API, but starting an environment needs the relevant environment
+integration configured.
 
 ## Project structure
 
@@ -67,8 +129,13 @@ frontend/       Next.js web app
 docker-compose.yml  Multi-service orchestration
 ```
 
-## Known issues (to fix)
+For Google sign-in, register `http://localhost:3000/auth/callback` as an authorized
+redirect URI in Google Cloud and use that exact URL for both
+`GOOGLE_REDIRECT_URL` and `NEXT_PUBLIC_GOOGLE_REDIRECT_URI`. If sign-in fails,
+check that the client ID is the same in both apps, the redirect URI matches
+exactly, and the backend logs do not report an authorization-code exchange error.
 
-- `challenges.expected_answer` column is referenced in `store.go` but not created by migration `002`.
-- Challenge list/detail scans read columns that aren't selected (column-count mismatch).
-- Google OAuth callback route not wired end-to-end on the frontend.
+
+docker compose ps
+curl -i http://localhost:8080/healthz
+curl -i http://localhost:8080/api/challenges

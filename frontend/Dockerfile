@@ -4,10 +4,11 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
+RUN mkdir -p public
 
 # NEXT_PUBLIC_* variables are inlined at build time by Next.js.
 ARG NEXT_PUBLIC_API_URL=http://localhost:8080

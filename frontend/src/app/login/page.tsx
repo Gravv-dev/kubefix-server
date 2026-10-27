@@ -1,6 +1,5 @@
 import { GoogleSignIn } from "@/components/auth/GoogleSignIn";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 
 const GOOGLE_CLIENT_ID =
   process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "your-google-client-id";
@@ -29,8 +28,3 @@ export default function LoginPage() {
     </div>
   );
 }
-
-// Minimal link shim (kept inline to avoid an extra file)
-const Link = ({ children }: { children: React.ReactNode }) => (
-  <a className="text-brand-400 hover:underline">{children}</a>
-);
