@@ -135,6 +135,13 @@ redirect URI in Google Cloud and use that exact URL for both
 check that the client ID is the same in both apps, the redirect URI matches
 exactly, and the backend logs do not report an authorization-code exchange error.
 
+Quick start with Docker Compose
+
+Create a .env file in the project root using the example in the README.
+Run docker compose up -d --build.
+Open http://localhost:3000.
+
+
 
 docker compose ps
 curl -i http://localhost:8080/healthz
